@@ -1,0 +1,389 @@
+import pandas as pd
+from googleapiclient.discovery import build
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.preprocessing import LabelEncoder
+import random
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import LabelEncoder
+import sklearn.model_selection
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+import os
+import joblib
+from docx import Document
+import re
+
+X = ["Thisisapositivesentence", "Thisisaneutralsentence", "Thisisanegativesentence"]
+y = ["positive", "neutral", "negative"]
+
+
+# This code generates the data for the file `data.csv`.
+def generate_data(num_samples):
+  """
+  Generates data for the file `data.csv`.
+
+  Args:
+    num_samples: The number of samples to generate.
+
+  Returns:
+    A list of lists, where each inner list contains a text and a label.
+  """
+
+  data = []
+  for _ in range(num_samples):
+    text = random.choice(["positive", "negative", "neutral"])
+    label = "Positive" if text == "positive" else "Negative" if text == "negative" else "Neutral"
+    data.append([text, label])
+
+  return data
+  
+def initialize_google_api(api_key, cse_id):
+    service = build("customsearch", "v1", developerKey=api_key)
+    return service
+
+  
+def fetch_data_from_google(service, query, cse_id):
+    res = service.cse().list(q=query, cx=cse_id).execute()
+    return res['items']
+
+    
+def classify_sentiment(user_input):
+    """
+    Classifies the sentiment of the user's input.
+
+    Args:
+        user_input: The user's input.
+
+    Returns:
+        The sentiment of the user's input.
+    """
+
+    # Try to convert the user input to a number.
+    try:
+        user_input = int(user_input)
+    except ValueError:
+        # If the user input is not a number, skip sentiment analysis and respond directly.
+        return respond_to_user_input(user_input)
+
+    # Classify the sentiment of the user input.
+    if user_input > 0:
+        return "positive"
+    elif user_input == 0:
+        return "neutral"
+    else:
+        return "negative"
+
+def create_data_file():
+  """
+  Creates the file `data.csv` and populates it with some sample data.
+  """
+
+  # Create a pandas dataframe.
+  df = pd.DataFrame({
+    "text": ["This is a sentence.", "This is another sentence."]
+  })
+
+  # Write the dataframe to a CSV file.
+  df.to_csv("data.csv")
+
+def preformat_data(data):
+  """
+  Preformats the data to be in a proper format.
+
+  Args:
+    data: The data to be preformatted.
+
+  Returns:
+    A preformatted version of the data.
+  """
+
+  # Convert the data to a list of strings.
+  data = [str(item) for item in data]
+
+  # Remove all punctuation from the data.
+  for i in range(len(data)):
+    data[i] = re.sub(r"[^\w\s]", "", data[i])
+
+  # Remove all whitespace from the data.
+  for i in range(len(data)):
+    data[i] = re.sub(r"\s+", "", data[i])
+
+  # Return the preformatted data.
+  return data
+
+# Load the data into a pandas dataframe.
+df = pd.read_csv("data.csv")
+
+# Preformat the data.
+data = preformat_data(df["text"])
+
+# Vectorize the text data
+vectorizer = CountVectorizer()
+X_vectorized = vectorizer.fit_transform(X)
+
+# Label encode the target variable
+label_encoder = LabelEncoder()
+y_encoded = label_encoder.fit_transform(y)
+
+# Split the data into a training set and a test set.
+X_train, X_test, y_train, y_test = train_test_split(X_vectorized, y_encoded, test_size=0.2)
+
+# Train a logistic regression model on the training set.
+model = LogisticRegression()
+model.fit(X_train, y_train)
+
+# Evaluate the model on the test set.
+score = model.score(X_test, y_test)
+
+print(f"The accuracy score is {score:.2f}")
+
+def generate_number_sequence(length):
+    sequence = []
+    for i in range(length):
+        sequence.append(i + 1)
+    return sequence
+
+
+def load_local_data(file_extension, file_path):
+    if not file_path:
+        return None
+
+    if file_extension == "csv":
+        data = pd.read_csv(file_path)
+        data["label"] = generate_number_sequence(len(data))
+        return data
+    elif file_extension == "txt":
+        with open(file_path, "r") as f:
+            text = f.read()
+            data = pd.DataFrame({"text": [text]})
+            data["label"] = generate_number_sequence(len(data))
+            return data
+    elif file_extension == "docx":
+        doc = Document(file_path)
+        text = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+        data = pd.DataFrame({"text": [text]})
+        data["label"] = generate_number_sequence(len(data))
+        return data
+    elif file_extension == "xml":
+        return load_local_xml_data(file_path)  # Define load_local_xml_data function
+    else:
+        print(f"Unsupported file extension: {file_extension}")
+        return None
+
+
+      
+def remove_special_characters(text):
+    """
+    Remove special characters from a string.
+
+    Args:
+        text (str): The string to remove special characters from.
+
+    Returns:
+        str: The string with special characters removed.
+    """
+
+    special_characters = ["\n", "\t", " "]
+    for special_character in special_characters:
+        text = text.replace(special_character, "")
+
+    return text
+
+
+
+def check_file_exists(file_path):
+    if not file_path:
+        return False
+
+    try:
+        return os.path.isfile(file_path)
+    except FileNotFoundError:
+        return False
+
+def load_data(data_source):
+    data = []
+
+    if data_source == 'local':
+        num_files = int(input('Enter the number of local files: '))
+        file_paths = [input(f'Enter the path to local file {i+1}: ').strip('\"') for i in range(num_files)]
+
+        for file_path in file_paths:
+            file_extension = file_path.split('.')[-1]
+            data.append(load_local_data(file_extension, file_path))
+
+    elif data_source == 'web':
+        url = input('Enter the URL of the webpage to scrape: ')
+        # Implement web data loading logic
+        pass
+    else:
+        raise ValueError('Invalid data source')
+
+    if len(data) == 0:
+        raise ValueError('No data found')
+
+    return pd.concat(data, ignore_index=True)
+
+def preprocess_data(data):
+    vectorizer = CountVectorizer(max_features=10000)
+    vectorizer.fit(data['text'])
+    X = vectorizer.transform(data['text'])
+    vocabulary = vectorizer.get_feature_names_out()
+    return X, vocabulary
+
+def split_data(X, y):
+  """
+  Splits the data into a training set and a test set, using stratified splitting.
+
+  Args:
+    X: The data to split.
+    y: The labels for the data.
+
+  Returns:
+    The training set, the test set, the training labels, and the test labels.
+  """
+
+  # Create a label encoder.
+  encoder = LabelEncoder()
+
+  # Fit the label encoder to the labels.
+  encoder.fit(y)
+
+  # Transform the labels.
+  y = encoder.transform(y)
+  
+   # Convert the data to numeric data.
+  X = encoder.transform(X)
+  
+
+  # Split the data into a training set and a test set, using stratified splitting.
+  X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y)
+  
+ 
+
+  return X_train, X_test, y_train, y_test
+
+def train_model(data, model_type="MultinomialNB"):
+    if model_type == "MultinomialNB":
+        model = MultinomialNB()
+    elif model_type == "RandomForestClassifier":
+        model = RandomForestClassifier()
+    elif model_type == "SVC":
+        model = SVC()
+    else:
+        raise ValueError("Invalid model type")
+
+    # Convert the data to a sparse matrix format.
+    vectorizer = CountVectorizer()
+    X_vectorized = vectorizer.fit_transform(data["text"])
+
+    # Convert the labels to numeric data.
+    label_encoder = LabelEncoder()
+    y_encoded = label_encoder.fit_transform(data["label"])
+
+    # Split the data into a training set and a test set.
+    X_train, X_test, y_train, y_test = train_test_split(X_vectorized, y_encoded, stratify=y_encoded)
+
+    # Train the model on the training set.
+    model.fit(X_train, y_train)
+
+    return model
+
+
+
+def save_model(model, file_path):
+    joblib.dump(model, file_path)
+
+def load_model(file_path):
+    model = joblib.load(file_path)
+    return model
+
+
+def main():
+    # Initialize Google API
+    api_key = "AIzaSyDD6UFLX91lWDtvik098FbS6-f0huNENkg"
+    cse_id = "72a9f7da7e1774bcf"
+    service = initialize_google_api(api_key, cse_id)
+    
+    # Step 1: Data Collection
+    contexts = ["low_accuracy", "high_accuracy", "new_data"]
+    questions = ["Would you like to provide more training data?", 
+             "Would you like to test the model?", 
+             "Would you like to label the new data?"]
+
+    # Step 2: Feature Engineering
+    vectorizer = CountVectorizer()
+    X = vectorizer.fit_transform(contexts)
+
+    # Step 3: Model Training
+    clf = MultinomialNB()
+    clf.fit(X, questions)
+
+# Step 4: Integration
+def get_question(context):
+    context_vectorized = vectorizer.transform([context])
+    question = clf.predict(context_vectorized)
+    return question[0]
+
+    while True:  # Keep running the program
+        try:
+            # Step 1: Load Data
+            data_source = input("Enter the data source (local/web): ")
+            data = load_data(data_source)
+            
+            # Step 2: Preprocess Data
+            data["text"] = preformat_data(data["text"])
+            
+            # Step 3: Feature Extraction
+            vectorizer = CountVectorizer()
+            X_vectorized = vectorizer.fit_transform(data["text"])
+            
+            # Step 4: Label Encoding
+            label_encoder = LabelEncoder()
+            
+            # Check the number of unique labels
+            unique_labels = len(set(y_encoded))
+            if unique_labels <= 1:
+                print(f"The number of classes has to be greater than one; got {unique_labels} class(es)")
+                new_labels = input("Please enter new labels for the data, separated by commas: ").split(',')
+                
+                # Validate the number of new labels
+                if len(new_labels) != len(data):
+                    print("The number of new labels doesn't match the length of the index.")
+                    continue  # or return to ask for labels again
+                
+                # Update labels and re-encode
+                data["label"] = new_labels
+                y_encoded = label_encoder.fit_transform(data["label"])
+            
+            # Step 5: Split Data
+            X_train, X_test, y_train, y_test = train_test_split(X_vectorized, y_encoded, test_size=0.2)
+            
+            # Step 6: Train Model
+            model_type = input("Enter the model type (MultinomialNB/RandomForestClassifier/SVC): ")
+            model = train_model(data, model_type)
+            
+            # Step 7: Evaluate Model
+            score = model.score(X_test, y_test)
+            print(f"The accuracy score is {score:.2f}")
+
+        except ValueError as e:
+            print(f"An error occurred: {e}")
+
+            # Fetch more data if needed
+            user_input = input("Would you like to fetch more data to train the model? (yes/no): ")
+            if user_input.lower() == 'yes':
+                query = input("Enter the query to search for more data: ")
+                fetched_data = fetch_data_from_google(service, query)
+                # Process fetched_data to add more data to your training set
+
+        # Ask the user if they want to continue
+        user_input = input("Do you want to continue? (yes/no): ")
+        if user_input.lower() != 'yes':
+            print("Exiting the program.")
+            break
+
+if __name__ == "__main__":
+    main()
